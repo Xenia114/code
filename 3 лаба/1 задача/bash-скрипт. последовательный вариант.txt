@@ -1,0 +1,27 @@
+#!/bin/bash
+
+executable="./program_mpi_summ"
+runs=100
+sum_time=0
+
+if [ ! -f "$executable" ]; then
+    echo "Executable not found: $executable"
+    exit 1
+fi
+
+echo "Running $runs times..."
+
+for ((i = 1; i <= runs; i++)); do
+    time=$(mpirun -np 1 "$executable")
+
+    if [[ -z "$time" ]]; then
+        echo "Empty output on run $i"
+        exit 1
+    fi
+
+    sum_time=$(awk -v a="$sum_time" -v b="$time" 'BEGIN { print a + b }')
+done
+
+average_time=$(awk -v total="$sum_time" -v n="$runs" 'BEGIN { printf "%.6f", total / n }')
+
+echo "Average time over $runs runs: $average_time seconds"

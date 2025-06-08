@@ -1,0 +1,13 @@
+#!/bin/bash
+#BSUB -J SeqSumAvg
+#BSUB -W 00:10
+#BSUB -n 1
+#BSUB -R "span[ptile=1]"
+#BSUB -oo output.out
+#BSUB -eo error.err
+
+module load mpi/openmpi-x86_64
+
+echo "Running 100 iterations at $(date)"
+bash run_sec.sh
+echo "Done at $(date)"

@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+#BSUB -J MyMPIJobs
+#BSUB -W 00:20
+#BSUB -n 16
+#BSUB -R "span[ptile=4]"
+#BSUB -oo output_b_p.%J.out
+#BSUB -eo error_b_p.%J.err
+
+module load mpi/openmpi-x86_64
+
+runs=10
+sum=0
+np=16  # количество процессов
+
+for ((i=1; i<=runs; i++))
+do
+    echo "Запуск $i/$runs"
+
+    # Запускаем MPI-программу
+    output=$(mpirun -np $np ./program_bubble_parallel)
+
+    # Ожидаем строку вида: "MPI Odd-Even Transposition Sort completed in X.XXXX seconds"
+    time=$(echo "$output" | grep -oP 'completed in \K[\d.]+')
+
+    if [[ -z "$time" ]]; then
+        echo "Ошибка: не удалось извлечь время выполнения на шаге $i"
+        echo "$output"
+        exit 1
+    fi
+
+    sum=$(awk -v a="$sum" -v b="$time" 'BEGIN { print a + b }')
+done
+
+average=$(awk -v total="$sum" -v count="$runs" 'BEGIN { print total / count }')
+echo "Среднее время выполнения за $runs запусков: $average секунд"

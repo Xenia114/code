@@ -1,0 +1,13 @@
+#!/bin/bash
+#BSUB -J MPI_SumJob
+#BSUB -W 00:20
+#BSUB -n 8
+#BSUB -R "span[ptile=1]"
+#BSUB -oo output_parallel.%J.out
+#BSUB -eo error_parallel.%J.err
+
+module load mpi/openmpi-x86_64
+
+export MPI_PROCESSES=8           # Передаём число процессов в скрипт
+
+bash run_sec_parallel.sh

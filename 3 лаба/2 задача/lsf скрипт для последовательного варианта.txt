@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+#BSUB -J MySeqJob
+#BSUB -W 00:20
+#BSUB -n 1
+#BSUB -oo output_seq.%J.out
+#BSUB -eo error_seq.%J.err
+
+runs=10
+sum=0
+
+for ((i=1; i<=runs; i++))
+do
+    echo "Запуск $i/$runs"
+
+    output=$(./program_bubble dummy)
+
+    # извлекаем время: строка должна содержать "time: ..."
+    time=$(echo "$output" | grep -oP 'time: \K[\d.]+')
+
+    if [[ -z "$time" ]]; then
+        echo "Ошибка: не удалось извлечь время выполнения на шаге $i"
+        echo "$output"
+        exit 1
+    fi
+
+    sum=$(awk -v a="$sum" -v b="$time" 'BEGIN { print a + b }')
+done
+
+average=$(awk -v total="$sum" -v count="$runs" 'BEGIN { print total / count }')
+echo "Среднее время выполнения за $runs запусков: $average секунд"
