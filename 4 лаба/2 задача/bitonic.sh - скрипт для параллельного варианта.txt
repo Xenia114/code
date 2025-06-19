@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Загрузка модуля CUDA
+module load cuda
+
+SRC=bitonic.cu
+EXEC=bitonic_sort
+
+SIZES=(131072 262144 524288)
+THREADS=512
+
+for SIZE in "${SIZES[@]}"; do
+    LOG="A_bit_${SIZE}_log.txt"
+    > "$LOG"
+
+    echo "Размер массива: $SIZE"
+
+    for i in {1..100}; do
+        echo "Запуск $i..."
+        TIME=$(./$EXEC $SIZE $THREADS)
+        echo "[$i] TIME='$TIME'"
+
+        if [[ $TIME =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "$TIME" >> "$LOG"
+        else
+            echo "Неверный формат времени: $TIME" >> "$LOG"
+        fi
+    done
+
+    TOTAL=$(awk '{s+=$1} END {print s}' "$LOG")
+    AVG=$(awk -v total="$TOTAL" 'BEGIN {printf "%.6f", total/100}')
+    echo "Среднее время: $AVG сек." | tee -a "$LOG"
+    echo "Количество потоков: $THREADS" >> "$LOG"
+        echo "Количество запусков: $RUNS" >> "$LOG"
+done

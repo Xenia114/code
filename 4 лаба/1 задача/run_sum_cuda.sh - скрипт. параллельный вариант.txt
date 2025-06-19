@@ -1,0 +1,24 @@
+#!/bin/bash
+module load cuda
+
+RUNS=${1:-10}          
+THREADS=${2:-256}        
+EXEC="./sum_cuda_program"  
+LOG="sum_cuda_log.txt"    
+
+if [ ! -x "$EXEC" ]; then
+    echo "Ошибка: исполняемый файл $EXEC не найден или не является исполняемым."
+    exit 1
+fi
+
+> "$LOG"
+
+for i in $(seq 1 "$RUNS"); do
+    TIME=$($EXEC "$RUNS" "$THREADS")
+    echo "$i $TIME" >> "$LOG"
+done
+
+AVG=$(awk '{sum+=$2} END {printf "%.6f", sum/NR}' "$LOG")
+echo "Среднее время: $AVG сек." >> "$LOG"
+echo "Количество потоков: $THREADS" >> "$LOG"
+echo "Количество запусков: $RUNS" >> "$LOG"

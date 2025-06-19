@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+#BSUB -J MySeqJob
+#BSUB -W 00:20
+#BSUB -n 1
+#BSUB -oo output_seq_bit.%J.out
+#BSUB -eo error_seq_bit.%J.err
+
+runs=100
+sum=0
+ELEMENTS=1000000
+
+for ((i=1; i<=runs; i++)); do
+    echo "Запуск $i/$runs с $ELEMENTS элементами"
+
+    output=$(./program_merge "$ELEMENTS")
+
+    time=$(echo "$output" | grep -oP 'time: \K[\d.]+' )
+
+    if [[ -z "$time" ]]; then
+        echo "Ошибка: не удалось извлечь время выполнения на шаге $i"
+        echo "Вывод программы:"
+        echo "$output"
+        exit 1
+    fi
+
+    sum=$(awk -v a="$sum" -v b="$time" 'BEGIN { print a + b }')
+done
+
+average=$(awk -v total="$sum" -v count="$runs" 'BEGIN { print total / count }')
+echo "Среднее время выполнения за $runs запусков для $ELEMENTS элементов: $average секунд"
