@@ -1,83 +1,87 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <cuda.h>
+#include <cuda_runtime.h>
 #include <time.h>
 
-// CUDA kernel: один шаг битонической сортировки
-__global__ void bitonicSortStep(int* data, int j, int k, int size) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= size) return;
+#define ARRAY_SIZE 10000000
+#define THREADS_PER_BLOCK 256
 
-    int ixj = i ^ j;
-    if (ixj > i) {
-        if (((i & k) == 0 && data[i] > data[ixj]) ||
-            ((i & k) != 0 && data[i] < data[ixj])) {
-            int temp = data[i];
-            data[i] = data[ixj];
-            data[ixj] = temp;
+__global__ void sum_reduction(int* input, long long* partial_sums, int n) {
+    extern __shared__ int sdata[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    sdata[tid] = (i < n) ? input[i] : 0;
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
         }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        partial_sums[blockIdx.x] = sdata[0];
     }
 }
 
-// Bitonic Sort — запускается на CPU, вызывает CUDA kernel
-void bitonicSort(int* data, int size, int threads) {
-    int* dev_data;
-    cudaMalloc((void**)&dev_data, size * sizeof(int));
-    cudaMemcpy(dev_data, data, size * sizeof(int), cudaMemcpyHostToDevice);
-
-    int blocks = (size + threads - 1) / threads;
-
-    for (int k = 2; k <= size; k <<= 1) {
-        for (int j = k >> 1; j > 0; j >>= 1) {
-            bitonicSortStep<<<blocks, threads>>>(dev_data, j, k, size);
-            cudaDeviceSynchronize();
-        }
-    }
-
-    cudaMemcpy(data, dev_data, size * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaFree(dev_data);
-}
-
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s <ARRAY_SIZE> <THREADS_PER_BLOCK>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <num_runs> <threads_per_block>\n", argv[0]);
         return 1;
     }
 
-    int size = atoi(argv[1]);
-    int threads = atoi(argv[2]);
+    int runs = atoi(argv[1]);
+    int threads_per_block = atoi(argv[2]);
 
-    // Проверка: размер должен быть степенью двойки
-    if ((size & (size - 1)) != 0) {
-        fprintf(stderr, "Error: size must be a power of 2\n");
+    int* h_array = (int*)malloc(ARRAY_SIZE * sizeof(int));
+    if (!h_array) {
+        fprintf(stderr, "Host memory allocation failed!\n");
         return 1;
     }
 
-    int* data = (int*)malloc(size * sizeof(int));
-    if (!data) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return 1;
+    for (int i = 0; i < ARRAY_SIZE; ++i) {
+        h_array[i] = i + 1;
     }
 
-    srand((unsigned)time(NULL));
-    for (int i = 0; i < size; ++i) {
-        data[i] = rand() % 10000;
+    int* d_array;
+    long long* d_partial_sums;
+    cudaMalloc((void**)&d_array, ARRAY_SIZE * sizeof(int));
+    cudaMemcpy(d_array, h_array, ARRAY_SIZE * sizeof(int), cudaMemcpyHostToDevice);
+
+    int blocks = (ARRAY_SIZE + threads_per_block - 1) / threads_per_block;
+    cudaMalloc((void**)&d_partial_sums, blocks * sizeof(long long));
+
+    long long total_time = 0;
+
+    for (int run = 0; run < runs; ++run) {
+        cudaDeviceSynchronize();
+        clock_t start = clock();
+
+        sum_reduction<<<blocks, threads_per_block, threads_per_block * sizeof(int)>>>(d_array, d_partial_sums, ARRAY_SIZE);
+        cudaDeviceSynchronize();
+
+        long long* h_partial_sums = (long long*)malloc(blocks * sizeof(long long));
+        cudaMemcpy(h_partial_sums, d_partial_sums, blocks * sizeof(long long), cudaMemcpyDeviceToHost);
+
+        long long total_sum = 0;
+        for (int i = 0; i < blocks; ++i)
+            total_sum += h_partial_sums[i];
+
+        clock_t end = clock();
+        total_time += (end - start);
+
+        free(h_partial_sums);
     }
 
-    cudaEvent_t start, stop;
-    float milliseconds = 0;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start, 0);
+    double avg_time = (double)total_time / runs / CLOCKS_PER_SEC;
+    printf("%.6f\n", avg_time);  // Для вывода в скрипт
 
-    bitonicSort(data, size, threads);
+    free(h_array);
+    cudaFree(d_array);
+    cudaFree(d_partial_sums);
 
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&milliseconds, start, stop);
-
-    printf("%.6f\n", milliseconds / 1000.0f);
-
-    free(data);
     return 0;
 }
