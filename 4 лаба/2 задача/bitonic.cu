@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
     int size = atoi(argv[1]);
     int threads = atoi(argv[2]);
 
+    // Проверка: размер должен быть степенью двойки
     if ((size & (size - 1)) != 0) {
         fprintf(stderr, "Error: size must be a power of 2\n");
         return 1;
